@@ -25,10 +25,10 @@ class ApiHelper{
      }
    }
 
-   static Future<Map<String,List<NewsModel>>> loadNewsHistory() async {
+   static Future<Map<DateTime,List<NewsModel>>> loadNewsHistory() async {
      ///send Request and Parse by method from NewsModel
      String body = (await sendRequest('history', HttpMethod.GET)).body;
-     Map<String,List<NewsModel>> news = NewsModel.fromHistoryMapJson(body);
+     Map<DateTime,List<NewsModel>> news = NewsModel.fromHistoryMapJson(body);
      return news ;
    }
 }

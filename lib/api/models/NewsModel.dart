@@ -27,10 +27,10 @@ class NewsModel {
     );}
 
   static List<NewsModel> fromListJson(String str) => List<NewsModel>.from(json.decode(str).map((x) => NewsModel.fromJson(x)));
-  static Map<String,List<NewsModel>> fromHistoryMapJson(String str) => Map<String,List<NewsModel>>.from(
+  static Map<DateTime,List<NewsModel>> fromHistoryMapJson(String str) => Map<DateTime,List<NewsModel>>.from(
       json.decode(str).map(
               (k,x) => MapEntry(
-                  k, NewsModel.fromListJson(
+                  DateTime.parse(k), NewsModel.fromListJson(
                   json.encode(x)
               )))
   );

@@ -10,14 +10,32 @@ The app is a **daily puzzle game** where users group 16 keywords into 4 correct 
 
 ### Core flow:
 
-1. Load historical news data
-2. Select a date (latest by default)
-3. Generate a 4x4 grid of keywords
-4. User selects 4 tiles
-5. Validate selection against article keyword groups
-6. Merge correct groups into article tiles
-7. Repeat until all groups are solved
+```mermaid
+flowchart TD
+    A[App Start] --> B[Load News History]
+    B --> C[Select Latest Date]
+    C --> D[Build Grid Tiles]
+    D --> E[Render 4x4 Grid]
 
+    E --> F[User Selects Tiles]
+    F --> G{4 Tiles Selected?}
+
+    G -- No --> E
+    G -- Yes --> H[Submit Group]
+
+    H --> I{Match Found?}
+
+    I -- Yes --> J[Merge Tiles into Article]
+    I -- One-Off --> K[Show "Fast richtig"]
+    I -- No --> L[Show Error + Shake]
+
+    J --> M{All Groups Solved?}
+    M -- No --> E
+    M -- Yes --> N[Game Complete]
+
+    K --> E
+    L --> E
+```
 ---
 
 # 2. Data Layer
@@ -87,6 +105,26 @@ OverlayEntry? _currentToast;
 AnimationController _shakeController;
 ```
 
+### State Flow
+```mermaid
+flowchart TD
+  API[API: loadNewsHistory] --> H[_historyData]
+
+  H --> D[_selectedDate]
+  D --> G[_currentGridTiles]
+
+  G --> UI[UI Grid Rendering]
+
+  UI --> S[_selectedIndices]
+
+  S --> SUB[_submitGroup()]
+
+SUB -->|Success| G
+SUB -->|Fail| FB[Feedback (Toast + Shake)]
+
+G --> END{Game Over?}
+END -->|Yes| DONE[Show Success UI]
+```
 ---
 
 # 4. GridTileData Model
@@ -124,8 +162,21 @@ class GridTileData {
 
 ## `_initData()`
 
-```
-API → sort dates → select latest date → build grid
+```mermaid
+sequenceDiagram
+    participant UI
+    participant State
+    participant API
+
+    UI->>State: initState()
+    State->>API: loadNewsHistory()
+    API-->>State: Data Map
+
+    State->>State: Sort Dates
+    State->>State: Select Latest
+    State->>State: Build Grid
+
+    State-->>UI: Render
 ```
 
 Steps:
@@ -165,13 +216,14 @@ This is the **main reset function**.
 
 ### Grid Creation:
 
-```dart
-articles
-  → extract keywords
-  → wrap into GridTileData
-  → take first 16
-  → fill missing slots if needed
-  → shuffle
+```mermaid
+flowchart LR
+  A[Articles] --> B[Extract Keywords]
+  B --> C[GridTileData]
+  C --> D[Take 16]
+  D --> E[Fill Missing]
+  E --> F[Shuffle]
+  F --> G[Grid Ready]
 ```
 
 Then:
@@ -214,27 +266,27 @@ Purpose:
 
 ## `_submitGroup()`
 
-### Step 1: Validation
+```mermaid
+flowchart TD
+    A[Submit] --> B{4 Selected?}
 
-* If selected tiles ≠ 4 → show toast
+    B -- No --> C[Toast]
 
----
+    B -- Yes --> D[Extract Keywords]
+    D --> E[Sort + Normalize]
+    E --> F[Compare]
 
-### Step 2: Extract Selection
+    F --> G{Result}
 
-```dart
-selectedKeywords
-→ uppercase
-→ sorted
+    G -- Exact --> H[Success]
+    G -- No --> J[Failure]
+
+    H --> K[Update Grid]
+    K --> L[Check Game Over]
+
+    I --> M[Back to Grid]
+    J --> M
 ```
-
----
-
-### Step 3: Compare Against Articles
-
-For each article:
-
-* Compare sorted keyword lists
 
 #### Outcomes:
 
@@ -246,7 +298,7 @@ For each article:
 
 ---
 
-### Step 4: Success Flow
+### Success Flow
 
 1. Remove selected tiles
 2. Insert merged tile
@@ -266,7 +318,7 @@ GridTileData(
 
 ---
 
-### Step 5: Failure Flow
+### Failure Flow
 
 * Trigger shake animation
 * Increment `_attempts`
@@ -467,26 +519,26 @@ Gelöst in X Versuchen!
 
 # 18. State Flow Summary
 
-```
-API
- ↓
-_historyData
- ↓
-_selectedDate
- ↓
-_currentGridTiles
- ↓
-User Interaction
- ↓
-_selectedIndices
- ↓
-_submitGroup()
- ↓
-(Success → merge) OR (Fail → feedback)
- ↓
-UI updates
- ↓
-Repeat until solved
+```mermaid
+flowchart TD
+    A[API] --> B[_historyData]
+    B --> C[_selectedDate]
+    C --> D[_currentGridTiles]
+
+    D --> E[User Interaction]
+    E --> F[_selectedIndices]
+    F --> G[_submitGroup()]
+
+    G --> H{Result}
+    H -- Success --> I[Merge Tiles]
+    H -- Fail --> J[Feedback]
+
+    I --> K[UI Updates]
+    J --> K
+
+    K --> L{Solved?}
+    L -- No --> E
+    L -- Yes --> M[End]
 ```
 
 ---

@@ -26,7 +26,7 @@ flowchart TD
     H --> I{Match Found?}
 
     I -- Yes --> J[Merge Tiles into Article]
-    I -- One-Off --> K[Show "Fast richtig"]
+    I -- One-Off --> K["Show Fast richtig"]
     I -- No --> L[Show Error + Shake]
 
     J --> M{All Groups Solved?}
@@ -117,10 +117,10 @@ flowchart TD
 
   UI --> S[_selectedIndices]
 
-  S --> SUB[_submitGroup()]
+  S --> SUB["_submitGroup()"]
 
 SUB -->|Success| G
-SUB -->|Fail| FB[Feedback (Toast + Shake)]
+SUB -->|Fail| FB["Feedback (Toast + Shake)"]
 
 G --> END{Game Over?}
 END -->|Yes| DONE[Show Success UI]
@@ -527,7 +527,7 @@ flowchart TD
 
     D --> E[User Interaction]
     E --> F[_selectedIndices]
-    F --> G[_submitGroup()]
+    F --> G["_submitGroup()"]
 
     G --> H{Result}
     H -- Success --> I[Merge Tiles]

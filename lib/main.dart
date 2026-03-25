@@ -171,13 +171,14 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> with SingleTicker
 
       setState(() {
         _animateTiles = false; // 🚫 disable layout animation
-
+        int lastMergeIdx = _currentGridTiles.indexWhere((element) => !element.isMerged);
         for (final idx in selectedIndicesSorted) {
           _currentGridTiles.removeAt(idx);
         }
 
+        //insert merged tile at last merge tile position
         _currentGridTiles.insert(
-          0,
+          lastMergeIdx ,
           GridTileData(
             matchedArticle!.keywords,
             isMerged: true,
@@ -188,7 +189,6 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> with SingleTicker
 
         _selectedIndices.clear();
       });
-
       // reset animation flag + pop flag
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;

@@ -281,11 +281,6 @@ flowchart TD
     G -- Exact --> H[Success]
     G -- No --> J[Failure]
 
-    H --> K[Update Grid]
-    K --> L[Check Game Over]
-
-    I --> M[Back to Grid]
-    J --> M
 ```
 
 #### Outcomes:
@@ -527,7 +522,7 @@ flowchart TD
 
     D --> E[User Interaction]
     E --> F[_selectedIndices]
-    F --> G["_submitGroup()"]
+    F --> G[_submitGroup()]
 
     G --> H{Result}
     H -- Success --> I[Merge Tiles]

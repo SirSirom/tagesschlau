@@ -121,6 +121,7 @@ flowchart TD
 
 SUB -->|Success| G
 SUB -->|Fail| FB["Feedback (Toast + Shake)"]
+FB --> G
 
 G --> END{Game Over?}
 END -->|Yes| DONE[Show Success UI]
@@ -522,7 +523,7 @@ flowchart TD
 
     D --> E[User Interaction]
     E --> F[_selectedIndices]
-    F --> G[_submitGroup()]
+    F --> G["_submitGroup()"]
 
     G --> H{Result}
     H -- Success --> I[Merge Tiles]

@@ -583,3 +583,231 @@ If you understand:
 …you understand the entire app.
 
 ---
+# Backend
+
+Das Backend besteht aus vier Python-Skripten im Ordner `backend/`. Es erzeugt aus aktuellen Tagesschau-Artikeln taegliche Keyword-Sets, speichert diese historisch in einer JSON-Datei und stellt die Historie ueber einen kleinen HTTP-Server fuer die App bereit.
+
+## Ueberblick
+
+1. Eine Worthaeufigkeits-CSV wird heruntergeladen und entpackt.
+2. `idf_map_builder.py` erzeugt daraus eine `idf_map.csv`.
+3. `build_news_keywords.py` laedt die neuesten Artikel von der Tagesschau-API und bestimmt pro Artikel 4 Keywords.
+4. `update_news_history.py` schreibt das Tagesergebnis in `news_history.json`.
+5. `serve_news_history.py` liefert diese Datei ueber `/history` an die App aus.
+
+## Dateien im Backend
+
+- `backend/idf_map_builder.py`: Baut aus einer CSV mit den Spalten `word` und `freq` eine IDF-Tabelle.
+- `backend/build_news_keywords.py`: Holt Daten von `https://www.tagesschau.de/api2u/homepage`, filtert Artikel und berechnet Keywords.
+- `backend/update_news_history.py`: Schreibt fuer das aktuelle Datum einen neuen Eintrag in `news_history.json`.
+- `backend/serve_news_history.py`: Startet einen HTTP-Server auf Port `9100` und liefert `news_history.json` unter `/history`.
+
+## Wie die Skripte arbeiten
+
+`build_news_keywords.py` arbeitet in mehreren Schritten:
+
+- Es laedt die Daten vom Tagesschau-Endpunkt `homepage`.
+- Es ignoriert Eintraege mit dem Tag `liveblog`.
+- Es sortiert die Artikel nach Datum und nimmt die 4 neuesten Artikel.
+- Es extrahiert aus dem Content nur Text- und Headline-Bloecke.
+- Es verwendet spaCy mit dem Modell `de_core_news_sm`, um nur Nomen und Eigennamen zu behalten.
+- Es entfernt Stopwoerter und sehr kurze Begriffe.
+- Es berechnet mit der zuvor erzeugten `idf_map.csv` einen Score pro Wort.
+- Es waehlt pro Artikel bis zu 4 Keywords aus und vermeidet doppelte Keywords ueber mehrere Artikel hinweg.
+
+Wichtig:
+
+- `build_news_keywords.py` erwartet die Datei `idf_map.csv` im aktuellen Arbeitsverzeichnis.
+- Wenn das Skript direkt gestartet wird, erzeugt es eine Datei wie `news_keywords_YYYY-MM-DD_HH-MM-SS.json`.
+- `update_news_history.py` nutzt intern `generate_news_keywords()` aus `build_news_keywords.py` und schreibt das Ergebnis in `news_history.json`.
+- `serve_news_history.py` liest ebenfalls relativ aus dem aktuellen Arbeitsverzeichnis. Auf dem Server sollte es daher aus dem Ordner `backend/` gestartet werden oder mit passendem `WorkingDirectory`.
+
+## Linux-Setup
+
+Beispielhaft fuer Ubuntu oder Debian:
+
+```bash
+sudo apt update
+sudo apt install -y python3 python3-venv python3-pip p7zip-full
+```
+
+Projektverzeichnis vorbereiten:
+
+```bash
+cd /opt/tagesschlau
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install pandas numpy spacy
+python -m spacy download de_core_news_sm
+```
+
+## Wortfrequenzdatei herunterladen
+
+Zuerst muss die deutsche Wortfrequenzliste heruntergeladen und entpackt werden:
+
+```bash
+cd /opt/tagesschlau/backend
+wget https://nlp-data-filestorage.s3.eu-central-1.amazonaws.com/word-frequencies/decow_wordfreq_cistem.csv.7z
+7z x decow_wordfreq_cistem.csv.7z
+```
+
+## IDF-Tabelle erzeugen
+
+`idf_map_builder.py` erwartet eine CSV mit mindestens den Spalten `word` und `freq`. Daraus wird fuer jedes Wort ein IDF-Wert berechnet:
+
+- Hoher IDF-Wert: Das Wort ist selten und daher eher als Keyword geeignet.
+- Niedriger IDF-Wert: Das Wort kommt haeufig vor und ist meist weniger aussagekraeftig.
+
+Beispiel:
+
+```bash
+cd /opt/tagesschlau/backend
+python idf_map_builder.py decow_wordfreq_cistem.csv idf_map.csv
+```
+
+## Keywords fuer aktuelle Nachrichten erzeugen
+
+Zum Testen kann das Keyword-Skript direkt ausgefuehrt werden:
+
+```bash
+cd /opt/tagesschlau/backend
+python build_news_keywords.py
+```
+
+Dabei entsteht eine Datei mit Zeitstempel, zum Beispiel `news_keywords_2026-03-29_06-00-01.json`.
+
+## Historie aktualisieren
+
+Das taegliche Skript schreibt die neuesten 4 Artikel mit dem aktuellen Datum als Schluessel in `news_history.json`:
+
+```bash
+cd /opt/tagesschlau/backend
+python update_news_history.py
+```
+
+Die Struktur ist dabei ungefaehr:
+
+```json
+{
+  "2026-03-29": [
+    {
+      "title": "...",
+      "date": "...",
+      "shareURL": "...",
+      "imageURL": "...",
+      "keywords": ["...", "...", "...", "..."]
+    }
+  ]
+}
+```
+
+## History fuer die App ausliefern
+
+Der HTTP-Server wird dauerhaft auf dem Linux-Server betrieben:
+
+```bash
+cd /opt/tagesschlau/backend
+python serve_news_history.py
+```
+
+Danach ist die Datei ueber `http://localhost:9100/history` erreichbar.
+
+Hinweis:
+
+- Im aktuellen Code ist `HOST = "localhost"` gesetzt.
+- Soll die App von einem anderen Geraet oder ueber das Netzwerk zugreifen, muss entweder ein Reverse Proxy davorgeschaltet oder der Host im Skript angepasst werden.
+
+## Beispiel mit systemd
+
+### Service fuer den HTTP-Server
+
+Datei `/etc/systemd/system/tagesschlau-history.service`:
+
+```ini
+[Unit]
+Description=Tagesschlau History API
+After=network.target
+
+[Service]
+User=www-data
+WorkingDirectory=/opt/tagesschlau/backend
+ExecStart=/opt/tagesschlau/.venv/bin/python serve_news_history.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Aktivieren:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now tagesschlau-history.service
+```
+
+### Service fuer das taegliche Update
+
+Datei `/etc/systemd/system/tagesschlau-update.service`:
+
+```ini
+[Unit]
+Description=Update Tagesschlau News History
+After=network.target
+
+[Service]
+Type=oneshot
+User=www-data
+WorkingDirectory=/opt/tagesschlau/backend
+ExecStart=/opt/tagesschlau/.venv/bin/python update_news_history.py
+```
+
+### Timer fuer taegliche Ausfuehrung um 06:00 Uhr
+
+Datei `/etc/systemd/system/tagesschlau-update.timer`:
+
+```ini
+[Unit]
+Description=Run Tagesschlau update daily at 06:00
+
+[Timer]
+OnCalendar=*-*-* 06:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+Aktivieren:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now tagesschlau-update.timer
+```
+
+Status pruefen:
+
+```bash
+systemctl status tagesschlau-history.service
+systemctl status tagesschlau-update.timer
+systemctl list-timers --all | grep tagesschlau
+```
+
+## Ablauf im Betrieb
+
+1. Einmalig wird die Wortfrequenzdatei heruntergeladen.
+2. Einmalig wird daraus mit `idf_map_builder.py` die `idf_map.csv` erzeugt.
+3. Jeden Tag um 06:00 Uhr startet `update_news_history.py`.
+4. Das Skript holt die neuesten passenden Artikel von der Tagesschau-API.
+5. spaCy filtert die relevanten Nomen und Eigennamen.
+6. Die IDF-Werte helfen dabei, die besten 4 Keywords pro Artikel zu bestimmen.
+7. Das Ergebnis wird unter dem aktuellen Datum in `news_history.json` gespeichert.
+8. `serve_news_history.py` stellt diese Historie dauerhaft fuer die App bereit.
+
+## Voraussetzungen und typische Fehlerquellen
+
+- `idf_map.csv` muss vorhanden sein, bevor `build_news_keywords.py` oder `update_news_history.py` sinnvoll arbeiten koennen.
+- Das spaCy-Modell `de_core_news_sm` muss installiert sein, sonst startet `build_news_keywords.py` nicht.
+- Die Skripte verwenden relative Dateipfade. Das Arbeitsverzeichnis auf dem Server sollte deshalb `backend/` sein.
+- Fuer den Abruf der Tagesschau-Daten wird ein `User-Agent` gesetzt, damit der Request auf Linux nicht an Redirects oder Zugriffsbeschraenkungen scheitert.
+- Wenn `serve_news_history.py` mit `localhost` laeuft, ist der Endpunkt nur lokal auf dem Server erreichbar.

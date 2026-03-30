@@ -224,13 +224,6 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> with SingleTicker
   Widget build(BuildContext context) {
     if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator(color: Colors.black)));
 
-    final screenWidth = MediaQuery.of(context).size.width;
-    const spacing = 8.0;
-    const padding = 16.0;
-    final gridWidth = screenWidth - (padding * 2);
-    final normalTileWidth = (gridWidth - (spacing * 3)) / 4;
-    final rowHeight = 100.0 + spacing;
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -241,35 +234,97 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> with SingleTicker
         centerTitle: true,
         actions: [IconButton(icon: const Icon(Icons.calendar_month, color: Colors.black), onPressed: _showDateSelector)],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 5),
-            child: Text("Datum: ${_selectedDate?.day.toString().padLeft(2, '0')}.${_selectedDate?.month.toString().padLeft(2, '0')}.${_selectedDate?.year}",
-                style: const TextStyle(fontWeight: FontWeight.bold)),
-          ),
-          const Text("Bilde vier Gruppen aus vier Begriffen!"),
-          const SizedBox(height: 10),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final screenWidth = constraints.maxWidth;
+          final screenHeight = constraints.maxHeight;
 
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: padding),
-            child: SizedBox(
-              height: rowHeight * 4,
-              child: Stack(
-                children: _buildAnimatedTiles(normalTileWidth, spacing, rowHeight),
+          // Check for extremely small screen
+          if (screenHeight < 400 || screenWidth < 280) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(20.0),
+                child: Text(
+                  "Bildschirm zu klein.\nBitte vergrößere das Fenster.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            );
+          }
+
+          final effectiveWidth = math.min(screenWidth, 650.0);
+          const spacing = 8.0;
+          const padding = 16.0;
+          final gridWidth = effectiveWidth - (padding * 2);
+          final normalTileWidth = (gridWidth - (spacing * 3)) / 4;
+
+          // Calculate tile height based on width and available height
+          // Overhead estimate: AppBar(56) + Datum(20) + Info(20) + Attempts(25) + Buttons(60) + Spacings(40) = ~220
+          const estimatedOverhead = 220.0; 
+          double calculatedTileHeight = (screenHeight - estimatedOverhead) / 4;
+          
+          // Clamp the height
+          double tileHeight = calculatedTileHeight.clamp(55.0, 140.0);
+
+          final rowHeight = tileHeight + spacing;
+          final totalGridHeight = (rowHeight * 4) - spacing;
+
+          // Check if total content fits in the screen. If it does, we don't want to scroll.
+          // Total estimated content height
+          final totalContentHeight = totalGridHeight + estimatedOverhead;
+          final shouldScroll = totalContentHeight > screenHeight;
+
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 650),
+              child: SingleChildScrollView(
+                physics: shouldScroll ? const BouncingScrollPhysics() : const NeverScrollableScrollPhysics(),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: screenHeight),
+                  child: IntrinsicHeight(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: padding),
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 10),
+                          // Top Section
+                          Text("Datum: ${_selectedDate?.day.toString().padLeft(2, '0')}.${_selectedDate?.month.toString().padLeft(2, '0')}.${_selectedDate?.year}",
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          const Text("Bilde vier Gruppen aus vier Begriffen!"),
+                          
+                          const Spacer(),
+                          
+                          const SizedBox(height: 15),
+                          // Grid Section
+                          SizedBox(
+                            height: totalGridHeight,
+                            width: gridWidth,
+                            child: Stack(
+                              children: _buildAnimatedTiles(normalTileWidth, spacing, rowHeight, tileHeight),
+                            ),
+                          ),
+                          const SizedBox(height: 15),
+                          
+                          const Spacer(flex: 2),
+                          
+                          // Bottom Section
+                          _buildBottomSection(),
+                          const SizedBox(height: 30),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
-
-          const Spacer(),
-          _buildBottomSection(),
-          const SizedBox(height: 40),
-        ],
+          );
+        },
       ),
     );
   }
 
-  List<Widget> _buildAnimatedTiles(double tileWidth, double spacing, double rowHeight) {
+  List<Widget> _buildAnimatedTiles(double tileWidth, double spacing, double rowHeight, double tileHeight) {
     List<Widget> widgets = [];
     int unmergedCounter = 0;
     int mergedCounter = 0;
@@ -302,7 +357,7 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> with SingleTicker
           top: top,
           left: left,
           width: width,
-          height: 100,
+          height: tileHeight,
           child: _ShakeTransition(
             enabled: isSelected && _shakeController.isAnimating,
             controller: _shakeController,
@@ -355,14 +410,19 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> with SingleTicker
         borderRadius: BorderRadius.circular(6),
         gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.black.withOpacity(0.1), Colors.black.withOpacity(0.7)]),
       ),
-      padding: const EdgeInsets.all(8.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(tile.article?.title.toUpperCase() ?? "", textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-          const SizedBox(height: 4),
-          Text(tile.keywords.join(", ").toUpperCase(), textAlign: TextAlign.center, style: const TextStyle(fontSize: 10, color: Colors.white70)),
-        ],
+      padding: const EdgeInsets.all(4.0),
+      child: Center(
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(tile.article?.title.toUpperCase() ?? "", textAlign: TextAlign.center, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white)),
+              const SizedBox(height: 2),
+              Text(tile.keywords.join(", ").toUpperCase(), textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.white70)),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -373,7 +433,7 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> with SingleTicker
         padding: const EdgeInsets.symmetric(horizontal: 4),
         child: FittedBox(
           fit: BoxFit.scaleDown,
-          child: Text(tile.keywords.isNotEmpty ? tile.keywords.first : "", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isSelected ? Colors.white : Colors.black)),
+          child: Text(tile.keywords.isNotEmpty ? tile.keywords.first : "", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isSelected ? Colors.white : Colors.black)),
         ),
       ),
     );
@@ -386,7 +446,7 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> with SingleTicker
           duration: const Duration(milliseconds: 300),
           child: Text(_isGameOver ? "Gelöst in $_attempts Versuchen!" : "Versuche: $_attempts",
               key: ValueKey(_isGameOver.toString() + _attempts.toString()),
-              style: TextStyle(color: _isGameOver ? Colors.green : Colors.black54, fontWeight: FontWeight.bold, fontSize: _isGameOver ? 18 : 14)),
+              style: TextStyle(color: _isGameOver ? Colors.green : Colors.black54, fontWeight: FontWeight.bold, fontSize: _isGameOver ? 20 : 16)),
         ),
         const SizedBox(height: 16),
         if (!_isGameOver)
@@ -413,12 +473,13 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> with SingleTicker
     return OutlinedButton(
       onPressed: onPressed,
       style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         backgroundColor: isFilled ? Colors.black : Colors.white,
         foregroundColor: isFilled ? Colors.white : Colors.black,
-        side: const BorderSide(color: Colors.black),
+        side: const BorderSide(color: Colors.black, width: 1.5),
         shape: const StadiumBorder(),
       ),
-      child: Text(label),
+      child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
     );
   }
 
@@ -516,7 +577,7 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
   @override
   Widget build(BuildContext context) {
     return Positioned(
-      bottom: 150,
+      top: 100,
       width: MediaQuery.of(context).size.width,
       child: FadeTransition(
         opacity: _fadeController,

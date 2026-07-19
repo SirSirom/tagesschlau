@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 class NewsModel {
   String title;
@@ -15,25 +16,69 @@ class NewsModel {
     required this.keywords,
   });
 
-  factory NewsModel.fromJson(Map<String, dynamic> jsonMap){
+  factory NewsModel.fromJson(Map<String, dynamic> jsonMap) {
+    // Check for missing fields and log them to help debug the API response
+    final missingFields = <String>[];
+    if (jsonMap["title"] == null) missingFields.add("title");
+    if (jsonMap["date"] == null) missingFields.add("date");
+    if (jsonMap["shareURL"] == null) missingFields.add("shareURL");
+    if (jsonMap["imageURL"] == null) missingFields.add("imageURL");
+    if (jsonMap["keywords"] == null) missingFields.add("keywords");
 
-    // Convert Map<String, dynamic> to NewsModel object
+    if (missingFields.isNotEmpty) {
+      developer.log(
+        'Missing fields $missingFields in news article. Title: ${jsonMap["title"]}. Full JSON: $jsonMap',
+        name: 'NewsModel',
+      );
+    }
+
     return NewsModel(
-      title: jsonMap["title"] as String,
-      shareURL: jsonMap["shareURL"] as String,
-      imageURL: jsonMap["imageURL"] as String,
-      date: DateTime.parse(jsonMap["date"]),
-      keywords: List<String>.from(jsonMap["keywords"]),
-    );}
+      title: jsonMap["title"]?.toString() ?? "",
+      shareURL: jsonMap["shareURL"]?.toString() ?? "",
+      imageURL: jsonMap["imageURL"]?.toString() ?? "",
+      date: DateTime.tryParse(jsonMap["date"]?.toString() ?? "") ?? DateTime.now(),
+      keywords: (jsonMap["keywords"] as List?)
+              ?.map((k) => k?.toString() ?? "")
+              .toList() ??
+          [],
+    );
+  }
 
-  static List<NewsModel> fromListJson(String str) => List<NewsModel>.from(json.decode(str).map((x) => NewsModel.fromJson(x)));
-  static Map<DateTime,List<NewsModel>> fromHistoryMapJson(String str) => Map<DateTime,List<NewsModel>>.from(
-      json.decode(str).map(
-              (k,x) => MapEntry(
-                  DateTime.parse(k), NewsModel.fromListJson(
-                  json.encode(x)
-              )))
-  );
+  static List<NewsModel> fromListJson(String str) {
+    try {
+      final decoded = json.decode(str);
+      if (decoded is List) {
+        return decoded
+            .map((x) => NewsModel.fromJson(x as Map<String, dynamic>))
+            .toList();
+      } else {
+        developer.log('fromListJson: Expected List but got ${decoded.runtimeType}', name: 'NewsModel');
+      }
+    } catch (e, stack) {
+      developer.log('Error parsing news list', error: e, stackTrace: stack, name: 'NewsModel');
+    }
+    return [];
+  }
+
+  static Map<DateTime, List<NewsModel>> fromHistoryMapJson(String str) {
+    try {
+      final decoded = json.decode(str);
+      if (decoded is Map) {
+        return decoded.map((k, x) {
+          final date = DateTime.tryParse(k.toString()) ?? DateTime.now();
+          final list = x is List
+              ? x.map((i) => NewsModel.fromJson(i as Map<String, dynamic>)).toList()
+              : <NewsModel>[];
+          return MapEntry(date, list);
+        });
+      } else {
+        developer.log('fromHistoryMapJson: Expected Map but got ${decoded.runtimeType}', name: 'NewsModel');
+      }
+    } catch (e, stack) {
+      developer.log('Error parsing news history map', error: e, stackTrace: stack, name: 'NewsModel');
+    }
+    return {};
+  }
 
   @override
   String toString() {
